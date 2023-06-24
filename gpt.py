@@ -1,12 +1,18 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import tiktoken
+
+
+# To get the tokeniser corresponding to a specific model in the OpenAI API:
+enc = tiktoken.encoding_for_model("gpt2")
+assert enc.decode(enc.encode("hello world")) == "hello world"
 
 # hyperparameters
 batch_size = 64 # how many independent sequences will we process in parallel?
 block_size = 256 # what is the maximum context length for predictions?
-max_iters = 5000
-eval_interval = 500
+max_iters = 400
+eval_interval = 100
 learning_rate = 3e-4
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
@@ -22,20 +28,13 @@ torch.manual_seed(1337)
 with open('agg_data.txt', 'r', encoding='utf-8') as f:
     text = f.read()
 
-# here are all the unique characters that occur in this text
-chars = sorted(list(set(text)))
-vocab_size = len(chars)
-# create a mapping from characters to integers
-stoi = { ch:i for i,ch in enumerate(chars) }
-itos = { i:ch for i,ch in enumerate(chars) }
-encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
-decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
-
 # Train and test splits
-data = torch.tensor(encode(text), dtype=torch.long)
+data = torch.tensor(enc.encode(text), dtype=torch.long, device=device)
 n = int(0.9*len(data)) # first 90% will be train, rest val
 train_data = data[:n]
 val_data = data[n:]
+
+vocab_size = 50304
 
 # data loading
 def get_batch(split):
@@ -219,9 +218,8 @@ for iter in range(max_iters):
     loss.backward()
     optimizer.step()
 
-# generate from the model
 context = torch.zeros((1, 1), dtype=torch.long, device=device)
-print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
-#open('more.txt', 'w').write(decode(m.generate(context, max_new_tokens=10000)[0].tolist()))
+ans = m.generate(context, max_new_tokens=500)[0].tolist()
+print(enc.decode(ans))
 
-torch.save(m, f'gpt_model_agg.pt')
+torch.save(m, 'gpt_model_tiktoken_400.pt')

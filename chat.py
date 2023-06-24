@@ -1,12 +1,18 @@
 import torch
 import torch.nn as nn
 from torch.nn import functional as F
+import tiktoken
+
+
+# To get the tokeniser corresponding to a specific model in the OpenAI API:
+enc = tiktoken.encoding_for_model("gpt2")
+assert enc.decode(enc.encode("hello world")) == "hello world"
 
 # hyperparameters
 batch_size = 64 # how many independent sequences will we process in parallel?
 block_size = 256 # what is the maximum context length for predictions?
-max_iters = 5000
-eval_interval = 500
+max_iters = 1000
+eval_interval = 100
 learning_rate = 3e-4
 device = 'cuda' if torch.cuda.is_available() else 'cpu'
 eval_iters = 200
@@ -16,23 +22,16 @@ n_layer = 6
 dropout = 0.2
 # ------------
 
-# torch.manual_seed(1337)
+torch.manual_seed(1337)
 
 # wget https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
 with open('agg_data.txt', 'r', encoding='utf-8') as f:
     text = f.read()
 
 # here are all the unique characters that occur in this text
-chars = sorted(list(set(text)))
-vocab_size = len(chars)
-# create a mapping from characters to integers
-stoi = { ch:i for i,ch in enumerate(chars) }
-itos = { i:ch for i,ch in enumerate(chars) }
-encode = lambda s: [stoi[c] for c in s] # encoder: take a string, output a list of integers
-decode = lambda l: ''.join([itos[i] for i in l]) # decoder: take a list of integers, output a string
-
 # Train and test splits
-data = torch.tensor(encode(text), dtype=torch.long)
+data = torch.tensor(enc.encode(text), dtype=torch.long)
+
 n = int(0.9*len(data)) # first 90% will be train, rest val
 train_data = data[:n]
 val_data = data[n:]
@@ -195,12 +194,24 @@ class GPTLanguageModel(nn.Module):
             idx = torch.cat((idx, idx_next), dim=1) # (B, T+1)
         return idx
 
-m = torch.load('gpt_model_agg.pt')
+m = torch.load('gpt_model_tiktoken.pt')
 
+in_str = """
+Daniel Strizhevsky: I don’t believe in scenarios
+Chris Acker: BORING
+Daniel Strizhevsky: What will be nihongy's answer to scenarios
+Chris Acker: WE DONT have an answer
+Chris Acker: You need to get your butt up and talk to some Real nihongese individuals
+Daniel Strizhevsky: It seems you are falling behind
+Daniel Strizhevsky: Technology is progressing much further than that
+Daniel Strizhevsky: Soon we won't even NEED nihongese individuals
+"""
+in_data = torch.tensor([enc.encode(in_str)], dtype=torch.long, device=device)
+print(enc.decode(m.generate(in_data, max_new_tokens=200)[0].tolist()))
 while True:
     print('Ready for input')
     in_str = input()
     if not in_str:
         in_str = ""
-    in_data = torch.tensor([encode(in_str)], dtype=torch.long, device=device)
-    print(decode(m.generate(in_data, max_new_tokens=200)[0].tolist()))
+    in_data = torch.tensor([enc.encode(in_str)], dtype=torch.long, device=device)
+    print(enc.decode(m.generate(in_data, max_new_tokens=200)[0].tolist()))
